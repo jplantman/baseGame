@@ -1,0 +1,12 @@
+{
+    "name": "com.jplantman.io.gamebase",
+    "displayName": "gameBase",
+    "version": "1.0.0",
+    "description": "A simple game engine for html5 games.",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "author": "jplantman",
+    "license": "MIT"
+}
