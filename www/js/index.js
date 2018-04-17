@@ -26,7 +26,10 @@ var app = {
         document.addEventListener('deviceready', this.onDeviceReady.bind(this), false);
     },
     onDeviceReady: function() {
-        
+        // gameBase.preload( [
+        //     ['play', 'img/ui/play.png'],
+        //     ['pause', 'img/ui/pause.png']
+        // ], game.start );
     }
 };
 
