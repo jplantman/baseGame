@@ -7,15 +7,15 @@ game.start = function(){
 	// init canvas
 	var canvas = gb.initCanvas(300, 500);
 
+
 	// controls
 	var kb = gb.controls.initKeyboard();
-	kb.initArrowKeys();
-	kb.initWASD();
+	// kb.initArrowKeys();
+	// kb.initWASD();
 
 	// click controls
 	gb.noContextMenu();
-
-	// gameBase.initTouchLeftRight();
+	gameBase.initPointerTracker();
 
 	game.joystick = gb.initJoystick( 'right', gb.images.joystickGreen, 68, 68 );
 	
@@ -46,75 +46,98 @@ game.start = function(){
 
 	player.update = function(dt){
 		this.updateAnim();
-		var left = kb.left || kb.a || gb.controls.left;
-		var right = kb.right || kb.d || gb.controls.right;
+		// // keyboard and touch left.right based movement
+		// var left = kb.left || kb.a || gb.controls.left;
+		// var right = kb.right || kb.d || gb.controls.right;
 
-		if ( kb.up || kb.w ){
-			this.y -= this.speed * dt;
-			if ( this.y < 0 ){ this.y = 0 }
-		}
-		if ( kb.down || kb.s ){
-			this.y += this.speed * dt;
-			if ( this.y + this.h > canvas.height ){ this.y = canvas.height - this.h }
-		}
-		if ( left && !right ){
-			this.x -= this.speed * dt;
-			if ( this.x < 0 ){ this.x = 0 }
-			if ( !(this.animation.current == 'idleLeft') ){
+		// if ( kb.up || kb.w ){
+		// 	this.y -= this.speed * dt;
+		// 	if ( this.y < 0 ){ this.y = 0 }
+		// }
+		// if ( kb.down || kb.s ){
+		// 	this.y += this.speed * dt;
+		// 	if ( this.y + this.h > canvas.height ){ this.y = canvas.height - this.h }
+		// }
+		// if ( left && !right ){
+		// 	this.x -= this.speed * dt;
+		// 	if ( this.x < 0 ){ this.x = 0 }
+		// 	if ( !(this.animation.current == 'idleLeft') ){
+		// 		this.animate( 'left' );
+		// 	}
+		// }
+		// else if ( right & !left ){
+		// 	this.x += this.speed * dt;
+		// 	if ( this.x + this.w > canvas.width ){ this.x = canvas.width - this.w }
+		// 	if ( !(this.animation.current == 'idleRight') ){
+		// 		this.animate( 'right' );
+		// 	}
+		// } else {
+		// 	player.animate( 'idle' );
+		// }
+
+		// Joystick movement
+		var joy = game.joystick.velocities;
+		if ( joy ){
+
+			this.y += this.speed * joy[1] * dt;
+			this.x += this.speed * joy[0] * dt;
+			if ( this.x < 0 ){ this.x = 0 };
+			if ( this.x + this.w > canvas.width ){ this.x = canvas.width - this.w };
+			if ( this.y < canvas.height/2 ){ this.y = canvas.height/2 };
+			if ( this.y + this.h > canvas.height ){ this.y = canvas.height - this.h };
+			if ( joy[2] == 'left' && this.animation.current != 'idleLeft' ){
 				this.animate( 'left' );
-			}
-		}
-		else if ( right & !left ){
-			this.x += this.speed * dt;
-			if ( this.x + this.w > canvas.width ){ this.x = canvas.width - this.w }
-			if ( !(this.animation.current == 'idleRight') ){
+			} else if ( joy[2] == 'right' && this.animation.current != 'idleRight' ){
 				this.animate( 'right' );
 			}
-		} else {
+		}
+		else {
 			player.animate( 'idle' );
 		}
+
 	}
 
 	// pause btn
-	var pauseFunc = function(){
-		if ( !game.isPaused ){ // pause
-			this.sprite = gb.images.play;
-			game.isPaused = true;
-		} else { // play
-			game.isPaused = false;
-			this.sprite = gb.images.pause;
-			game.lastTime = Date.now();
-			setTimeout( game.loop, 1000/30 );
-		}
-	}
-
 	game.pauseBtn = gb.sprite({
 		type: 'button',
 		x: canvas.width-40,
 		y: 10,
 		w: 30,
 		h: 30,
-		sprite: gb.images.play,
+		sprite: gb.images.pause,
 		spriteW: 48,
 		spriteH: 48,
-		mouseup: pauseFunc,
-		touchend: pauseFunc
+		clickable: function(type, e){
+			if ( type == 'unclick' ){
+				if ( !game.isPaused ){ // pause
+					this.sprite = gb.images.play;
+					game.isPaused = true;
+				} else { // play
+					game.isPaused = false;
+					this.sprite = gb.images.pause;
+					game.lastTime = Date.now();
+					setTimeout( game.loop, 1000/30 );
+				}	
+			}
+		}
 	});
 
 	// main game loop
 	game.loop = function(){
-		if ( game.isPaused ){ return }
+		
 
 		gb.ctx.clearRect( 0, 0, canvas.width, canvas.height );
 		var now = Date.now();
 		var dt = ( now - game.lastTime ) / 1000 ;
 		game.lastTime = now;
 		
+		// gb.leftRightScreenTouchUpdate();
 		player.update(dt);
 		player.draw();
 		game.pauseBtn.draw();
-		game.joystick.draw();
+		game.joystick.update();
 
+		if ( game.isPaused ){ return }
 		setTimeout( game.loop, 1000/40 );
 	}
 

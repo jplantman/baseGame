@@ -5,7 +5,7 @@
 // 	- sprite creation and management +
 //  - animations +
 //  - clicking detection +
-// 	- easy buttons and joysticks
+// 	- easy buttons and joysticks +
 // 	- basic collisions and math +
 //  - extras: 
 //			random color generator +
@@ -47,6 +47,7 @@ gameBase.mousemoves = [];
 gameBase.touchstarts = [];
 gameBase.touchmoves = [];
 gameBase.touchends = [];
+gameBase.clickables = [];
 
 // basic sprite class
 gameBase.Sprite = function( options ){
@@ -80,30 +81,12 @@ gameBase.Sprite = function( options ){
 	// functionality
 	this.type = options.type;
 
-	if ( options.mousedown ){
-		this.mousedown = options.mousedown;
-		gameBase.mousedowns.push( this );
+	if ( options.clickable ){
+		this.clickable = options.clickable;
+		this.clickableActive = false;
+		gameBase.clickables.push( this );
 	}
-	if ( options.mousemove ){
-		this.mousemove = options.mousemove;
-		gameBase.mousemoves.push( this );
-	}
-	if ( options.mouseup ){
-		this.mouseup = options.mouseup;
-		gameBase.mouseups.push( this );
-	}
-	if ( options.touchstart ){
-		this.touchstart = options.touchstart;
-		gameBase.touchstarts.push( this );
-	}
-	if ( options.touchmove ){
-		this.touchmove = options.touchmove;
-		gameBase.touchmoves.push( this );
-	}
-	if ( options.touchend ){
-		this.touchend = options.touchend;
-		gameBase.touchends.push( this );
-	}
+
 }
 
 // sprite draw
@@ -195,11 +178,11 @@ gameBase.preload = function( arrayOfImgs, callback ){
 
 ///// COLLISIONS AND GEOMETRY /////
 
-function collides(a, b){
+gameBase.collides = function(a, b){
 	return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-function collidesArray(sprite, array){
+gameBase.collidesArray = function(sprite, array){
 	// checks collisions between a sprite and an array of sprites
 	for (var i = 0; i < array.length; i++) {
 		if ( collides( sprite, array[i] ) ){
@@ -208,20 +191,20 @@ function collidesArray(sprite, array){
 	};
 }
 
-function isPosInSprite(sprite, x, y){
+gameBase.isPosInSprite = function(sprite, x, y){
 	return sprite.x <= x && x <= sprite.x+sprite.w && 
 					   sprite.y <= y && y <= sprite.y+sprite.h;
 }
 
-function isPosInSprites(array, x, y){
+gameBase.isPosInSprites = function(array, x, y){
 	var i, l = array.length;
 	if ( !l ){ return }
 	for (i = 0; i < l; i++) {
-		if ( isPosInSprite(array[i], x, y) ){ return array[i]; }
+		if ( gameBase.isPosInSprite(array[i], x, y) ){ return array[i]; }
 	};
 }
 
-function distanceTo(sprite, x, y){
+gameBase.distanceTo = function(sprite, x, y){
 	// get distance between a sprite and a point
 	var centerX = sprite.x + sprite.w/2;
 	var centerY = sprite.y + sprite.h/2;
@@ -231,7 +214,7 @@ function distanceTo(sprite, x, y){
 	return Math.sqrt( sideX*sideX + sideY*sideY );
 }
 
-function distanceBetween(sprite, other){
+gameBase.distanceBetween = function(sprite, other){
 	// get distance between a sprite and a point
 	var x = other.x + other.w/2;
 	var y = other.y + other.h/2;
@@ -239,7 +222,7 @@ function distanceBetween(sprite, other){
 	return distanceTo(sprite, x, y) - (other.w+other.h)/4;
 }
 
-function angleTo(sprite, x, y){
+gameBase.angleTo = function(sprite, x, y){
 	// get angle between a sprite and a point
 	var centerX = sprite.x + sprite.w/2;
 	var centerY = sprite.y + sprite.h/2;
@@ -250,7 +233,7 @@ function angleTo(sprite, x, y){
 	return Math.atan2(sideY, sideX);
 }
 
-function getVelocities(sprite, x, y, speed){
+gameBase.getVelocities = function(sprite, x, y, speed){
 	// get the x and y vectors for an item moving from a sprite towards a point
 	var centerX = sprite.x + sprite.w/2;
 	var centerY = sprite.y + sprite.h/2;
@@ -293,47 +276,64 @@ gameBase.xyFromEvent = function(e){
 	}
 }
 
-gameBase.initClickEvents = function( eventsList, noSpriteHandler ){ 
-	// eventsList is a list of which events to add. 
-	// the options are:
-	//	mousedown, mousemove, mouseup, touchstart, touchmove, touchend
+gameBase.addEventListeners = function( eventsList, eventHandler ){ 
 	for (var i = 0; i < eventsList.length; i++) {
 		(function(n){
-
 			gameBase.canvas.addEventListener(eventsList[n], function( e ){
-				// get event position
-				var position = gameBase.windowXYtoCanvasXY( gameBase.xyFromEvent(e) );
-
-				// check if any sprites in the mousedowns (or whichever event) array intersects the event position
-				var sprites = isPosInSprites( gameBase[eventsList[n]+'s'], position[0], position[1] );
-
-				// if a sprite was clicked, toggle its function
-				if ( sprites ){ sprites[eventsList[n]](); }
-				else if ( typeof noSpriteHandler == 'function' ) {
-					// handle event when not attached to a certain sprite ( like clicking the ground )
-					noSpriteHandler( eventsList[n], e );
-				}
+				eventHandler( eventsList[n], e );
 			});
-		})(i);
-		
+		})(i);		
 	};		
 }
 
+// this function tracks the pointer and its status, and triggers any clickables.
 gameBase.initPointerTracker = function(){
-	if ( ctrl.pointer ){ console.log( 'pointer already exists!' ); return; }
+	if ( ctrl.pointer ){ console.log( 'pointer already exists!' ); return ctrl.pointer; }
 	ctrl.pointer = {
 		isDown: false,
-		position: undefined
+		position: undefined,
+		spriteActive: undefined,
+		spriteClickedOn: undefined
 	}
-	gameBase.initClickEvents( ['mousedown', 'touchstart'], function(type, e){
-		ctrl.pointer.isDown = true;
-		ctrl.pointer = gameBase.windowXYtoCanvasXY( gameBase.xyFromEvent(e) );
+	var standardizeEventTypes = function(type){
+		if ( type == 'mousedown' || type == 'touchstart' ){
+			return 'click';
+		}
+		if ( type == 'mousemove' || type == 'touchmove' ){
+			return 'move';
+		}
+		if ( type == 'mouseup' || type == 'touchend' ){
+			return 'unclick';
+		}
+	}
+	var positionAndSprite = function(type, e){
+		var pos = ctrl.pointer.position = gameBase.windowXYtoCanvasXY( gameBase.xyFromEvent(e) );
+		var sprite = ctrl.pointer.spriteActive = gameBase.isPosInSprites( gameBase.clickables, pos[0], pos[1] );
+		if ( sprite ){
+			ctrl.pointer.spriteActive.clickable( type, e );
+			if ( type == 'click' ){
+				ctrl.pointer.spriteClickedOn = sprite;
+			}
+		}
+	}
+	gameBase.addEventListeners( ['mousedown', 'touchstart'], function(type, e){
+		e.preventDefault();
+		if ( !ctrl.pointer.isDown ){
+			ctrl.pointer.isDown = true;
+			positionAndSprite( standardizeEventTypes( type ), e);	
+		}
 	} );
-	gameBase.initClickEvents( ['mousemove', 'touchmove'], function(type, e){
-		ctrl.pointer = gameBase.windowXYtoCanvasXY( gameBase.xyFromEvent(e) );
+	gameBase.addEventListeners( ['mousemove', 'touchmove'], function(type, e){
+		e.preventDefault();
+		positionAndSprite( standardizeEventTypes( type ), e);
 	} );
-	gameBase.initClickEvents( ['mouseup', 'touchend'], function(type, e){
-		ctrl.pointer.isDown = false;
+	gameBase.addEventListeners( ['mouseup', 'touchend'], function(type, e){
+		e.preventDefault();
+		if ( ctrl.pointer.isDown ){
+			ctrl.pointer.isDown = false;
+			positionAndSprite( standardizeEventTypes( type ), e);
+			ctrl.pointer.spriteClickedOn = null;
+		}
 	} );
 	return ctrl.pointer;
 }
@@ -343,30 +343,21 @@ gameBase.noContextMenu = function(){
 }
 
 // touch left or right side of the screen to move
-gameBase.initTouchLeftRight = function(){
-	gameBase.initClickEvents( ['mousedown', 'touchstart', 'mousemove', 'touchmove', 'mouseup', 'touchend'], function(type, e){
-
-		// move left or right when touching left or right side of screen 
-		if ( type == 'touchstart' || type == 'mousedown' || type == 'touchmove' || type == 'mousemove' ){
-			var position = gameBase.windowXYtoCanvasXY( gameBase.xyFromEvent(e) );
-			if ( position[1] > canvas.height/2 ){
-				if ( position[0] < canvas.width/2 ){
-					ctrl.left = true;
-					ctrl.right = false;
-				} else {
-					ctrl.right = true;
-					ctrl.left = false;
-				}
-			} else {
-				ctrl.left = false;
+gameBase.leftRightScreenTouchUpdate = function(){
+	ctrl.left = false;
+	ctrl.right = false;
+	if ( ctrl.pointer.isDown ){
+		var position = ctrl.pointer.position;
+		if ( position[1] > canvas.height/2 ){
+			if ( position[0] < canvas.width/2 ){
+				ctrl.left = true;
 				ctrl.right = false;
+			} else {
+				ctrl.right = true;
+				ctrl.left = false;
 			}
 		}
-		else if ( type == 'touchend' || type == 'mouseup' ){
-			ctrl.left = false;
-			ctrl.right = false;
-		}
-	} );
+	}
 }
 
 // joysticks
@@ -376,14 +367,37 @@ gameBase.initJoystick = function( leftOrRight, img, imgW, imgH ){
 	
 	var joystick = this.sprite({
 		type: "joystick",
-		x: ( leftOrRight == 'right' ? canvas.width - 50 : 10 ),
-		y: canvas.height - 50,
-		w: 40,
-		h: 40,
+		x: ( leftOrRight == 'right' ? canvas.width - 60 : 10 ),
+		y: canvas.height - 60,
+		w: 50,
+		h: 50,
 		sprite: img,
 		spriteW: imgW,
-		spriteH: imgH
+		spriteH: imgH,
+		clickable: function(type, e){
+			if ( ctrl.pointer.isDown ){
+				this.velocities = gameBase.getVelocities( this, ctrl.pointer.position[0], ctrl.pointer.position[1], 1 );	
+			} else {
+				this.velocities = null;
+			}
+		}
 	});
+	joystick.update = function(){
+		if ( ctrl.pointer.spriteActive != this ){
+			this.velocities = null;
+		}
+
+		if ( this.velocities ) {
+			gameBase.ctx.translate( 8 * this.velocities[0], 8 * this.velocities[1] )
+			this.draw();
+			gameBase.ctx.translate( -8 * this.velocities[0], -8 * this.velocities[1] )
+		} else {
+			this.draw();
+		}
+		
+		
+		
+	}
 
 	return joystick;
 }
@@ -487,4 +501,5 @@ gameBase.srand = function(i, randInt0toN) {
      //console.log(x)
      return x;
 }
+
 
