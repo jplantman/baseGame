@@ -1,21 +1,5 @@
-// this is the core file of a game engine built to make multi-platform games.
-// the creator jp (jplantman) requests that nobody else uses or copies any part of this code, although it is under an MIT license.
 
-// the expected features include:
-// 	- sprite creation and management +
-//  - animations +
-//  - clicking detection +
-// 	- easy buttons and joysticks +
-// 	- basic collisions and math +
-//  - extras: 
-//			random color generator +
-//			seeded random +
-
-// intentionally excluding: ( these are better done manually, customized for each project )
-//  - movement
-// 	- game loop
-
-// SECTIONS to look up:
+// SECTIONS:
 
 // canvas
 // sprites
@@ -41,12 +25,6 @@ gameBase.initCanvas = function(w, h){
 ///// SPRITES /////
 
 // holds clickable sprites for click detection
-gameBase.mousedowns = [];
-gameBase.mouseups = [];
-gameBase.mousemoves = [];
-gameBase.touchstarts = [];
-gameBase.touchmoves = [];
-gameBase.touchends = [];
 gameBase.clickables = [];
 
 // basic sprite class
@@ -266,76 +244,146 @@ gameBase.getVelocities = function(sprite, x, y, speed){
 var ctrl = gameBase.controls = {};
 
 // clicks and taps
-gameBase.windowXYtoCanvasXY = function( array ){
-	return [ array[0] * gameBase.canvas.width / window.innerWidth, array[1] * gameBase.canvas.height / window.innerHeight ];
-}
-gameBase.xyFromEvent = function(e){
-	if ( e.x ){ return [ e.x, e.y ] }
-	else if ( e.changedTouches && e.changedTouches[0].clientX ){
-		return [ e.changedTouches[0].clientX, e.changedTouches[0].clientY ];
-	}
+gameBase.windowXYtoCanvasXY = function( x, y ){
+	return [ x * gameBase.canvas.width / window.innerWidth, y * gameBase.canvas.height / window.innerHeight ];
 }
 
-gameBase.addEventListeners = function( eventsList, eventHandler ){ 
-	for (var i = 0; i < eventsList.length; i++) {
-		(function(n){
-			gameBase.canvas.addEventListener(eventsList[n], function( e ){
-				eventHandler( eventsList[n], e );
-			});
-		})(i);		
-	};		
-}
-
-// this function tracks the pointer and its status, and triggers any clickables.
-gameBase.initPointerTracker = function(){
-	if ( ctrl.pointer ){ console.log( 'pointer already exists!' ); return ctrl.pointer; }
-	ctrl.pointer = {
+// tracks mouse clicks
+gameBase.initMouseTracker = function(){
+	if ( ctrl.mouse ){ return; }
+	ctrl.mouse = {
+		type: 'mouse',
 		isDown: false,
 		position: undefined,
 		spriteActive: undefined,
 		spriteClickedOn: undefined
 	}
-	var standardizeEventTypes = function(type){
-		if ( type == 'mousedown' || type == 'touchstart' ){
-			return 'click';
-		}
-		if ( type == 'mousemove' || type == 'touchmove' ){
-			return 'move';
-		}
-		if ( type == 'mouseup' || type == 'touchend' ){
-			return 'unclick';
-		}
-	}
+
 	var positionAndSprite = function(type, e){
-		var pos = ctrl.pointer.position = gameBase.windowXYtoCanvasXY( gameBase.xyFromEvent(e) );
-		var sprite = ctrl.pointer.spriteActive = gameBase.isPosInSprites( gameBase.clickables, pos[0], pos[1] );
+		var pos = ctrl.mouse.position = gameBase.windowXYtoCanvasXY( e.x, e.y );
+		var sprite = ctrl.mouse.spriteActive = gameBase.isPosInSprites( gameBase.clickables, pos[0], pos[1] );
 		if ( sprite ){
-			ctrl.pointer.spriteActive.clickable( type, e );
-			if ( type == 'click' ){
-				ctrl.pointer.spriteClickedOn = sprite;
+			ctrl.mouse.spriteActive.clickable( type, e );
+			if ( type == 'mousedown' ){
+				ctrl.mouse.spriteClickedOn = sprite;
 			}
 		}
 	}
-	gameBase.addEventListeners( ['mousedown', 'touchstart'], function(type, e){
-		e.preventDefault();
-		if ( !ctrl.pointer.isDown ){
-			ctrl.pointer.isDown = true;
-			positionAndSprite( standardizeEventTypes( type ), e);	
+	canvas.addEventListener( 'mousedown', function(e){
+		if ( !ctrl.mouse.isDown ){
+			ctrl.mouse.isDown = true;
+			positionAndSprite( 'mousedown', e );	
 		}
 	} );
-	gameBase.addEventListeners( ['mousemove', 'touchmove'], function(type, e){
-		e.preventDefault();
-		positionAndSprite( standardizeEventTypes( type ), e);
+	canvas.addEventListener( 'mousemove', function(e){
+		positionAndSprite( 'mousemove', e );
 	} );
-	gameBase.addEventListeners( ['mouseup', 'touchend'], function(type, e){
+	canvas.addEventListener( 'mouseup', function(e){
 		e.preventDefault();
-		if ( ctrl.pointer.isDown ){
-			ctrl.pointer.isDown = false;
-			positionAndSprite( standardizeEventTypes( type ), e);
-			ctrl.pointer.spriteClickedOn = null;
+		if ( ctrl.mouse.isDown ){
+			ctrl.mouse.isDown = false;
+			positionAndSprite( 'mouseup', e );
+			ctrl.mouse.spriteClickedOn = null;
 		}
 	} );
-	return ctrl.pointer;
+	return ctrl.mouse;
+}
+
+gameBase.initTouchTracker = function(){
+	if ( ctrl.touch ){ console.log( 'touch already exists!' ); return ctrl.touch; }
+	var touchCtrl = ctrl.touch = {
+		active: [], // list of active touch events. this array can be checked by the user for the status of taps and sprites tapped
+	}
+	function copyTouch( touch ) {
+		var pos = gameBase.windowXYtoCanvasXY( touch.pageX, touch.pageY );
+		return { identifier: touch.identifier, x: pos[0], y: pos[1] };
+	}
+	function spriteCheck( touch, type ){
+		touch = findActiveTouch( touch.identifier );
+		var sprite = gameBase.isPosInSprites( gameBase.clickables, touch.x, touch.y );
+		if ( sprite ){
+			touch.sprite = sprite;
+			if ( typeof sprite.clickable == 'function' ){ sprite.clickable( type ); }
+		} else {
+			touch.sprite = null;
+		}
+	}
+	function findActiveTouch( identifier ){
+		for (var i = 0; i < touchCtrl.active.length; i++) {
+			if ( touchCtrl.active[i].identifier == identifier ){
+				return touchCtrl.active[i];
+			}
+		};
+		return -1;
+	}
+	function findActiveTouchIndex( identifier ){
+		for (var i = 0; i < touchCtrl.active.length; i++) {
+			if ( touchCtrl.active[i].identifier == identifier ){
+				return i;
+			}
+		};
+		return -1;
+	}
+
+	function updateActiveTouch( changedTouches, type ){
+		for (var i = 0; i < changedTouches.length; i++) {
+			var touch = copyTouch( changedTouches[i] );
+			touch.type = type;
+			var index = findActiveTouchIndex( touch.identifier );
+			touchCtrl.active.splice( index, 1, touch );
+			spriteCheck( touch, type );
+		};
+	}
+
+	canvas.addEventListener("touchstart", function(e){
+		e.preventDefault();
+		for (var i = 0; i < e.changedTouches.length; i++) {
+			var touch = copyTouch( e.changedTouches[i] );
+			touch.type = 'touchstart';
+			var index = findActiveTouchIndex( touch.identifier );
+			touchCtrl.active.push( touch );
+			spriteCheck( touch, 'touchstart' );
+		};
+	}, false);
+
+	canvas.addEventListener("touchmove", function(e){
+		e.preventDefault();
+		updateActiveTouch( e.changedTouches, 'touchmove' );
+	}, false);
+
+	canvas.addEventListener("touchend", function(e){
+		e.preventDefault();
+		updateActiveTouch( e.changedTouches, 'touchend' );
+	}, false);
+
+	canvas.addEventListener("touchcancel", function(e){
+		e.preventDefault();
+		updateActiveTouch( e.changedTouches, 'touchcancel' );
+	}, false);
+
+	touchCtrl.update = function( arrayOfFunctions ){
+		for (var i = 0; i < touchCtrl.active.length; i++) {
+			var t = touchCtrl.active[i];
+			
+			// run all the functions passed here by the user
+			for (var k = 0; k < arrayOfFunctions.length; k++) {
+				arrayOfFunctions[k]( t );
+			};
+
+			// remove touchend and touchcancels
+			if ( t.type == 'touchend' || t.type == 'touchcancel' ){
+				touchCtrl.active.splice(i, 1);
+				i--;
+			}	
+
+			// touchstarts had their chance, now they are touchovers
+			if ( t.type == 'touchstart' ){
+				t.type = 'touchover';
+			}
+		};
+	}
+	
+	return touchCtrl;
 }
 
 gameBase.noContextMenu = function(){
@@ -343,28 +391,24 @@ gameBase.noContextMenu = function(){
 }
 
 // touch left or right side of the screen to move
-gameBase.leftRightScreenTouchUpdate = function(){
+gameBase.leftRightScreenTouchUpdate = function( touch ){
+	// pass this function to touchCtrl.update([]);
 	ctrl.left = false;
 	ctrl.right = false;
-	if ( ctrl.pointer.isDown ){
-		var position = ctrl.pointer.position;
-		if ( position[1] > canvas.height/2 ){
-			if ( position[0] < canvas.width/2 ){
-				ctrl.left = true;
-				ctrl.right = false;
-			} else {
-				ctrl.right = true;
-				ctrl.left = false;
-			}
+	if ( !touch || touch.type == 'touchend' || touch.type == 'touchcancel' ){ return; }
+	if ( !touch.sprite && touch.y > canvas.height/2 ){
+		if ( touch.x < canvas.width/2 ){
+			ctrl.left = true;
+		} else {
+			ctrl.right = true;
 		}
 	}
 }
 
-// joysticks
+// joysticks ( requires touch tracker ) NOT FIXED YET
 gameBase.initJoystick = function( leftOrRight, img, imgW, imgH ){
+	if ( !ctrl.pointer || !ctrl.pointer.type != 'touch' ){ console.log( 'initialize touch tracker before initializing joystick.' ); return; }
 
-	this.initPointerTracker();
-	
 	var joystick = this.sprite({
 		type: "joystick",
 		x: ( leftOrRight == 'right' ? canvas.width - 60 : 10 ),
@@ -393,10 +437,7 @@ gameBase.initJoystick = function( leftOrRight, img, imgW, imgH ){
 			gameBase.ctx.translate( -8 * this.velocities[0], -8 * this.velocities[1] )
 		} else {
 			this.draw();
-		}
-		
-		
-		
+		}	
 	}
 
 	return joystick;
